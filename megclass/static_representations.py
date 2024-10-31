@@ -116,121 +116,92 @@ def main(args):
     print("Finish reading data")
 
     data_folder = os.path.join(INTERMEDIATE_DATA_FOLDER_PATH, args.dataset_name)
+    dataset["class_names"] = [x.lower() for x in dataset["class_names"]]
 
-    if args.representation == "cate":
-        # only use cate embeddings for static word representations; ASSUMES TOKENIZATION FROM PLM RUN IS ALREADY COMPLETE
-        emb = {}
-        with open(os.path.join(DATA_FOLDER_PATH, args.dataset_name, args.cate_emb), "r") as infile:
-            vectors = infile.readlines()[1:]
-            for v in vectors:
-                token, cate_emb = v.strip().split(' ', 1)
-                cate_emb = cate_emb.split(' ')
-                emb[token] = np.squeeze(np.array(cate_emb))
-                emb[token] = emb[token].astype(np.float64)
+    data = dataset["cleaned_text"]
+    data = [x.lower() for x in data]
+    model_class, tokenizer_class, pretrained_weights = MODELS[args.lm_type]
 
-        vocab_words = emb.keys()
-        cate_static_word_representations = emb.values()
+    tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
+    model = model_class.from_pretrained(pretrained_weights, output_hidden_states=True)
+    model.eval()
+    model.cuda()
 
-        os.makedirs(data_folder, exist_ok=True)
-        with open(os.path.join(data_folder, "dataset.pk"), "wb") as f:
-            pk.dump(dataset, f)
+    tokenization_info = []
+    sent_tokenization_info = []
+    import re
+    from collections import Counter
+    counts = Counter()
+    import string
 
-        with open(os.path.join(data_folder, f"static_repr_lm-{args.lm_type}-{args.layer}.pk"), "wb") as f:
-            pk.dump({
-                "static_word_representations": cate_static_word_representations,
-                "vocab_words": vocab_words,
-                "word_to_index": {v: k for k, v in enumerate(vocab_words)},
-            }, f, protocol=4)
-
-    else:
-        if args.lm_type == 'bbu':
-            dataset["class_names"] = [x.lower() for x in dataset["class_names"]]
-
-        data = dataset["cleaned_text"]
-        if args.lm_type == 'bbu':
-            data = [x.lower() for x in data]
-        model_class, tokenizer_class, pretrained_weights = MODELS[args.lm_type]
-
-        tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
-        model = model_class.from_pretrained(pretrained_weights, output_hidden_states=True)
-        model.eval()
-        model.cuda()
-
-        tokenization_info = []
-        sent_tokenization_info = []
-        import re
-        from collections import Counter
-        counts = Counter()
-        import string
-
-        for text in tqdm(data):
-            tokenized_text, tokenized_to_id_indicies, tokenids_chunks = prepare_sentence(tokenizer, text, lm_type=args.lm_type)
-            counts.update(word.translate(str.maketrans('','',string.punctuation)) for word in tokenized_text)
+    for text in tqdm(data):
+        tokenized_text, tokenized_to_id_indicies, tokenids_chunks = prepare_sentence(tokenizer, text, lm_type=args.lm_type)
+        counts.update(word.translate(str.maketrans('','',string.punctuation)) for word in tokenized_text)
             
-        del counts['']
-        updated_counts = {k: c for k, c in counts.items() if c >= args.vocab_min_occurrence}
-        word_rep = {}
-        word_count = {}
+    del counts['']
+    updated_counts = {k: c for k, c in counts.items() if c >= args.vocab_min_occurrence}
+    word_rep = {}
+    word_count = {}
 
-        sent_data = {}
+    sent_data = {}
 
-        for idx, text in tqdm(enumerate(data)):
-            tokenized_text, tokenized_to_id_indicies, tokenids_chunks = prepare_sentence(tokenizer, text, lm_type=args.lm_type)
-            tokenization_info.append((tokenized_text, tokenized_to_id_indicies, tokenids_chunks))
-            contextualized_word_representations = handle_sentence(model, args.layer, tokenized_text,
+    for idx, text in tqdm(enumerate(data)):
+        tokenized_text, tokenized_to_id_indicies, tokenids_chunks = prepare_sentence(tokenizer, text, lm_type=args.lm_type)
+        tokenization_info.append((tokenized_text, tokenized_to_id_indicies, tokenids_chunks))
+        contextualized_word_representations = handle_sentence(model, args.layer, tokenized_text,
                                              tokenized_to_id_indicies, tokenids_chunks)
-            for i in range(len(tokenized_text)):
-              word = tokenized_text[i]
-              if word in updated_counts.keys():
-                if word not in word_rep:
-                  word_rep[word] = 0
-                  word_count[word] = 0
-                word_rep[word] += contextualized_word_representations[i]
-                word_count[word] += 1
+        for i in range(len(tokenized_text)):
+          word = tokenized_text[i]
+          if word in updated_counts.keys():
+            if word not in word_rep:
+              word_rep[word] = 0
+              word_count[word] = 0
+            word_rep[word] += contextualized_word_representations[i]
+            word_count[word] += 1
 
-            if args.do_sent == "yes":
-                # tokenize sentences
-                sent_data[str(idx)] = []
-                sents = nltk.tokenize.sent_tokenize(text)
-                for s in sents:
-                    sent_data[str(idx)].append(s.strip())
-                    tokenized_sent, sent_tokenized_to_id_indicies, sent_tokenids_chunks = prepare_sentence(tokenizer, s.strip(), lm_type=args.lm_type)
-                    sent_tokenization_info.append((tokenized_sent, sent_tokenized_to_id_indicies, sent_tokenids_chunks))
-        
         if args.do_sent == "yes":
-            dataset["sent_data"] = sent_data
-            print(f"SENTENCE INFO! # of docs: {len(sent_data)}, # of sentences: {len(sent_tokenization_info)}")
-
-        word_avg = {}
-        for k,v in word_rep.items():
-          word_avg[k] = word_rep[k]/word_count[k]
+            # tokenize sentences
+            sent_data[str(idx)] = []
+            sents = nltk.tokenize.sent_tokenize(text)
+            for s in sents:
+                sent_data[str(idx)].append(s.strip())
+                tokenized_sent, sent_tokenized_to_id_indicies, sent_tokenids_chunks = prepare_sentence(tokenizer, s.strip(), lm_type=args.lm_type)
+                sent_tokenization_info.append((tokenized_sent, sent_tokenized_to_id_indicies, sent_tokenids_chunks))
         
-        vocab_words = list(word_avg.keys())
-        static_word_representations = list(word_avg.values())
-        vocab_occurrence = list(word_count.values()) 
+    if args.do_sent == "yes":
+        dataset["sent_data"] = sent_data
+        print(f"SENTENCE INFO! # of docs: {len(sent_data)}, # of sentences: {len(sent_tokenization_info)}")
 
-        os.makedirs(data_folder, exist_ok=True)
-        with open(os.path.join(data_folder, "dataset.pk"), "wb") as f:
-            pk.dump(dataset, f)
+    word_avg = {}
+    for k,v in word_rep.items():
+      word_avg[k] = word_rep[k]/word_count[k]
+        
+    vocab_words = list(word_avg.keys())
+    static_word_representations = list(word_avg.values())
+    vocab_occurrence = list(word_count.values()) 
 
-        with open(os.path.join(data_folder, f"tokenization_lm-{args.lm_type}-{args.layer}.pk"), "wb") as f:
-            if args.do_sent == "yes":
-                pk.dump({
-                    "tokenization_info": tokenization_info,
-                    "sent_tokenization_info": sent_tokenization_info
-                }, f, protocol=4)
-            else:
-                pk.dump({
-                    "tokenization_info": tokenization_info
-                }, f, protocol=4)
+    os.makedirs(data_folder, exist_ok=True)
+    with open(os.path.join(data_folder, "dataset.pk"), "wb") as f:
+        pk.dump(dataset, f)
 
-        with open(os.path.join(data_folder, f"static_repr_lm-{args.lm_type}-{args.layer}.pk"), "wb") as f:
+    with open(os.path.join(data_folder, f"tokenization_lm-{args.lm_type}-{args.layer}.pk"), "wb") as f:
+        if args.do_sent == "yes":
             pk.dump({
-                "static_word_representations": static_word_representations,
-                "vocab_words": vocab_words,
-                "word_to_index": {v: k for k, v in enumerate(vocab_words)},
-                "vocab_occurrence": vocab_occurrence,
+                "tokenization_info": tokenization_info,
+                "sent_tokenization_info": sent_tokenization_info
             }, f, protocol=4)
+        else:
+            pk.dump({
+                "tokenization_info": tokenization_info
+            }, f, protocol=4)
+
+    with open(os.path.join(data_folder, f"static_repr_lm-{args.lm_type}-{args.layer}.pk"), "wb") as f:
+         pk.dump({
+            "static_word_representations": static_word_representations,
+            "vocab_words": vocab_words,
+            "word_to_index": {v: k for k, v in enumerate(vocab_words)},
+            "vocab_occurrence": vocab_occurrence,
+        }, f, protocol=4)
 
 
 if __name__ == '__main__':

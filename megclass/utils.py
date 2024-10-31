@@ -12,8 +12,10 @@ DATA_FOLDER_PATH = "/shared/data2/pk36/multidim/multigran/"
 INTERMEDIATE_DATA_FOLDER_PATH = "/home/pk36/MEGClass/intermediate_data/"
 
 MODELS = {
-    'bbc': (BertModel, BertTokenizer, 'bert-base-cased'),
-    'bbu': (BertModel, BertTokenizer, 'bert-base-uncased')
+    'bbu': (BertModel, BertTokenizer, 'bert-base-uncased'),
+    'bcb': (BertModel, BertTokenizer, 'emilyalsentzer/Bio_ClinicalBERT'),
+    'bmba': (BertModel, BertTokenizer, 'microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract'),
+    'bmbf': (BertModel, BertTokenizer, 'microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext')
 }
 
 

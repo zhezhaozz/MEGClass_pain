@@ -4,10 +4,8 @@ import pickle as pk
 import argparse
 import time
 import numpy as np
-import megclass, train_text_classifier, train_soft_classifier
-import class_oriented_sent_representations
-import static_representations
-from utils import (DATA_FOLDER_PATH, INTERMEDIATE_DATA_FOLDER_PATH)
+from megclass import megclass, train_text_classifier, train_soft_classifier, class_oriented_sent_representations, static_representations
+from megclass.utils import (DATA_FOLDER_PATH, INTERMEDIATE_DATA_FOLDER_PATH)
 
 def main(args):
     # initialize representations before iterative process: 

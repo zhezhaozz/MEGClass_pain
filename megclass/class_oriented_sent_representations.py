@@ -144,11 +144,13 @@ def weight_sentence(model,
     return document_representation
 
 def main(args):
+    # read class names
     data_folder = os.path.join(INTERMEDIATE_DATA_FOLDER_PATH, args.dataset_name)
     with open(os.path.join(data_folder, "dataset.pk"), "rb") as f:
         dataset = pk.load(f)
         class_names = dataset["class_names"]
 
+    # read static word representations
     static_repr_path = os.path.join(data_folder, f"static_repr_lm-{args.lm_type}-{args.layer}.pk")
     with open(static_repr_path, "rb") as f:
         vocab = pk.load(f)
@@ -156,6 +158,7 @@ def main(args):
         word_to_index = vocab["word_to_index"]
         vocab_words = vocab["vocab_words"]
 
+    # read tokens
     with open(os.path.join(data_folder, f"tokenization_lm-{args.lm_type}-{args.layer}.pk"), "rb") as f:
         token_pk = pk.load(f)
         tokenization_info = token_pk["tokenization_info"]

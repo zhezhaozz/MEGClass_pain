@@ -1,12 +1,14 @@
 import argparse
 import os
-import pickle as pk
-from collections import defaultdict
-
-import numpy as np
+import re
+import string
 import torch
-from tqdm import tqdm
 import nltk
+import pickle as pk
+import numpy as np
+from collections import defaultdict
+from collections import Counter
+from tqdm import tqdm
 
 from preprocessing_utils import load
 from utils import DATA_FOLDER_PATH, INTERMEDIATE_DATA_FOLDER_PATH, MODELS, tensor_to_numpy
@@ -32,7 +34,7 @@ def prepare_sentence(tokenizer, text, lm_type='bbu'):
     if lm_type == 'roberta':
         tokenized_text = tokenizer.tokenize(text)
     else:
-        tokenized_text = tokenizer.basic_tokenizer.tokenize(text, never_split=tokenizer.all_special_tokens)
+        tokenized_text = tokenizer.basic_tokenizer.tokenize(text, never_split=tokenizer.all_special_tokens) # use BasicTokenizer to preprocess
     tokenized_to_id_indicies = []
 
     tokenids_chunks = []
@@ -44,18 +46,19 @@ def prepare_sentence(tokenizer, text, lm_type='bbu'):
                 tokens = tokenizer.tokenize(token)
             else:
                 tokens = tokenizer.wordpiece_tokenizer.tokenize(token)
+
+            tokenized_to_id_indicies.append((len(tokenids_chunks),
+                                             len(tokenids_chunk),
+                                             len(tokenids_chunk) + len(tokens)))
+            tokenids_chunk.extend(tokenizer.convert_tokens_to_ids(tokens))
         if token is None or len(tokenids_chunk) + len(tokens) > max_tokens:
+            # start of sentence; end of sentence
             tokenids_chunks.append([prepare_sentence.sos_id] + tokenids_chunk + [prepare_sentence.eos_id])
             if sliding_window_size > 0:
                 tokenids_chunk = tokenids_chunk[-sliding_window_size:]
             else:
                 tokenids_chunk = []
-        if token is not None:
-            tokenized_to_id_indicies.append((len(tokenids_chunks),
-                                             len(tokenids_chunk),
-                                             len(tokenids_chunk) + len(tokens)))
-            tokenids_chunk.extend(tokenizer.convert_tokens_to_ids(tokens))
-
+            
     return tokenized_text, tokenized_to_id_indicies, tokenids_chunks
 
 
@@ -112,6 +115,12 @@ def estimate_static(vocab, vocab_min_occurrence):
 
 
 def main(args):
+    if torch.cuda.is_available():
+        device = torch.device(0)
+    else:
+        device = 'cpu'
+    print(f"Using device: {device}")
+
     dataset = load(args.dataset_name)
     print("Finish reading data")
 
@@ -123,20 +132,17 @@ def main(args):
     model_class, tokenizer_class, pretrained_weights = MODELS[args.lm_type]
 
     tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
-    model = model_class.from_pretrained(pretrained_weights, output_hidden_states=True)
-    model.eval()
-    model.cuda()
+    model = model_class.from_pretrained(pretrained_weights, output_hidden_states=True).to(device)
 
     tokenization_info = []
     sent_tokenization_info = []
-    import re
-    from collections import Counter
+    
+    # preprocess sentences: 1. remove empty sentence; 2. remove words words appear less than min_occurence; remove punctuation
     counts = Counter()
-    import string
-
-    for text in tqdm(data):
-        tokenized_text, tokenized_to_id_indicies, tokenids_chunks = prepare_sentence(tokenizer, text, lm_type=args.lm_type)
-        counts.update(word.translate(str.maketrans('','',string.punctuation)) for word in tokenized_text)
+    with torch.no_grad():
+        for text in tqdm(data):
+            tokenized_text, tokenized_to_id_indicies, tokenids_chunks = prepare_sentence(tokenizer, text, lm_type=args.lm_type)
+            counts.update(word.translate(str.maketrans('','',string.punctuation)) for word in tokenized_text)
             
     del counts['']
     updated_counts = {k: c for k, c in counts.items() if c >= args.vocab_min_occurrence}
@@ -144,34 +150,37 @@ def main(args):
     word_count = {}
 
     sent_data = {}
-
-    for idx, text in tqdm(enumerate(data)):
-        tokenized_text, tokenized_to_id_indicies, tokenids_chunks = prepare_sentence(tokenizer, text, lm_type=args.lm_type)
-        tokenization_info.append((tokenized_text, tokenized_to_id_indicies, tokenids_chunks))
-        contextualized_word_representations = handle_sentence(model, args.layer, tokenized_text,
-                                             tokenized_to_id_indicies, tokenids_chunks)
-        for i in range(len(tokenized_text)):
-          word = tokenized_text[i]
-          if word in updated_counts.keys():
-            if word not in word_rep:
-              word_rep[word] = 0
-              word_count[word] = 0
-            word_rep[word] += contextualized_word_representations[i]
-            word_count[word] += 1
-
-        if args.do_sent == "yes":
+    with torch.no_grad():
+        for idx, text in tqdm(enumerate(data)):
             # tokenize sentences
-            sent_data[str(idx)] = []
-            sents = nltk.tokenize.sent_tokenize(text)
-            for s in sents:
-                sent_data[str(idx)].append(s.strip())
-                tokenized_sent, sent_tokenized_to_id_indicies, sent_tokenids_chunks = prepare_sentence(tokenizer, s.strip(), lm_type=args.lm_type)
-                sent_tokenization_info.append((tokenized_sent, sent_tokenized_to_id_indicies, sent_tokenids_chunks))
-        
+            tokenized_text, tokenized_to_id_indicies, tokenids_chunks = prepare_sentence(tokenizer, text, lm_type=args.lm_type)
+            tokenization_info.append((tokenized_text, tokenized_to_id_indicies, tokenids_chunks))
+            # get static contexualized word embeddings from each sentence
+            contextualized_word_representations = handle_sentence(model, args.layer, tokenized_text,
+                                                tokenized_to_id_indicies, tokenids_chunks)
+            for i in range(len(tokenized_text)):
+                word = tokenized_text[i]
+                if word in updated_counts.keys():
+                    if word not in word_rep:
+                        word_rep[word] = 0
+                        word_count[word] = 0
+                    word_rep[word] += contextualized_word_representations[i]
+                    word_count[word] += 1
+
+            if args.do_sent == "yes":
+                # tokenize sentences
+                sent_data[str(idx)] = []
+                sents = nltk.tokenize.sent_tokenize(text)
+                for s in sents:
+                    sent_data[str(idx)].append(s.strip())
+                    tokenized_sent, sent_tokenized_to_id_indicies, sent_tokenids_chunks = prepare_sentence(tokenizer, s.strip(), lm_type=args.lm_type)
+                    sent_tokenization_info.append((tokenized_sent, sent_tokenized_to_id_indicies, sent_tokenids_chunks))
+            
     if args.do_sent == "yes":
         dataset["sent_data"] = sent_data
         print(f"SENTENCE INFO! # of docs: {len(sent_data)}, # of sentences: {len(sent_tokenization_info)}")
 
+    # average word embeddings over number of mentions
     word_avg = {}
     for k,v in word_rep.items():
       word_avg[k] = word_rep[k]/word_count[k]
@@ -195,6 +204,7 @@ def main(args):
                 "tokenization_info": tokenization_info
             }, f, protocol=4)
 
+    # output static word representations
     with open(os.path.join(data_folder, f"static_repr_lm-{args.lm_type}-{args.layer}.pk"), "wb") as f:
          pk.dump({
             "static_word_representations": static_word_representations,
@@ -214,7 +224,6 @@ if __name__ == '__main__':
     # last layer of BERT
     parser.add_argument("--layer", type=int, default=12)
     parser.add_argument("--representation", type=str, default=None)
-    parser.add_argument("--cate_emb", type=str, default=None)
 
     args = parser.parse_args()
     print(vars(args))

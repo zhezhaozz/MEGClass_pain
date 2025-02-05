@@ -225,7 +225,7 @@ def generateDataset(documents_to_class, ranks, class_dist, num_classes, cleaned_
     ###
     gold_classes = [gold_labels[i] for i in selected]
     print(f"Threshold {thresh*100}% Evaluation: ")
-    evaluate_predictions(gold_classes, classes)
+    evaluate_predictions(gold_classes, classes,return_confusion=True)
     ###
     if write:
         write_to_dir(text, classes, probs, data_path, new_data_path)

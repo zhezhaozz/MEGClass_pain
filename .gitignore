@@ -1,4 +1,7 @@
 __pycache__/
 datasets/*
+datasets/*/*
 intermediate_data/*
+intermediate_data/*/*
 runs/*
+runs/*/*

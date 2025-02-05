@@ -410,6 +410,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         examples = (
             processor.get_test_examples(args.test_data_dir, args.dataset_name) if evaluate else processor.get_train_examples(args.train_data_dir)
         )
+        for example in examples:
+            example.text_a = str(example.text_a)
+            example.text_b = str(example.text_b)
         features = convert_examples_to_features(
             examples, tokenizer, max_length=args.max_seq_length, label_list=label_list, output_mode=output_mode,
         )

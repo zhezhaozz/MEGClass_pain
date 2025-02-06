@@ -170,19 +170,27 @@ def main(args):
     print(class_names)
 
     finished_class = set()
-    masked_words = set(class_names)
+    flattend_maked_words = [item for sublist in class_names for item in sublist]
+    masked_words = set(flattend_maked_words)
+    provided_class_words = set(flattend_maked_words)
     cls_repr = [None for _ in range(len(class_names))]
+    class_words = [class_names[cls] for cls in range(len(class_names))]
     # support multi-word class names
     class_words_representations = []
-    for cls in range(len(class_names)):
-        temp_repr = np.array([static_word_representations[word_to_index[w]] for w in class_names[cls].split("_")])
-        class_words_representations.append([np.mean(temp_repr, axis=0)])  
+    for words_list in class_words:
+        temp_repr = []
+        for w in words_list:
+            if len(w.split("_")) == 1:
+                temp_repr.append(static_word_representations[word_to_index[w]])
+            else:
+                w_temp_repr=np.array([static_word_representations[word_to_index[wi]] for wi in w.split("_")])
+                temp_repr.append([np.mean(w_temp_repr, axis=0)])
+        class_words_representations.append([np.mean(np.stack(temp_repr), axis=0)])  
 
     #class_words_representations = [[static_word_representations[word_to_index[class_names[cls]]]] for cls in range(len(class_names))]
 
     # Use X-Class keyword expansion for retrieving seedwords (give priority even if seeds.txt is specified)
     if args.T != -1:
-        class_words = [[class_names[cls]] for cls in range(len(class_names))]
         for t in range(1, args.T):
             class_representations = [average_with_harmonic_series(class_words_representation)
                                      for class_words_representation in class_words_representations]
@@ -205,6 +213,8 @@ def main(args):
                             if similarities[i] > highest_similarity:
                                 highest_similarity = similarities[i]
                                 highest_similarity_word_index = i
+                        elif word in provided_class_words:
+                            continue
                         else:
                             if word not in existing_class_words:
                                 stop_criterion = True
@@ -212,8 +222,11 @@ def main(args):
                             lowest_masked_words_similarity = min(lowest_masked_words_similarity, similarities[i])
                     else:
                         if word in existing_class_words:
-                            stop_criterion = True
-                            break
+                            if word in provided_class_words:
+                                continue
+                            else:
+                                stop_criterion = True
+                                break
                 # the topmost t words are no longer the t words in class_words
                 if lowest_masked_words_similarity < highest_similarity:
                     stop_criterion = True
@@ -223,6 +236,7 @@ def main(args):
                     class_words[cls] = class_words[cls][:-1]
                     class_words_representations[cls] = class_words_representations[cls][:-1]
                     cls_repr[cls] = average_with_harmonic_series(class_words_representations[cls])
+                    print(class_words[cls])
                     break
 
                 class_words[cls].append(vocab_words[highest_similarity_word_index])

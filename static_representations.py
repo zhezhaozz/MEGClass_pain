@@ -144,7 +144,7 @@ def main(args):
 
     else:
         if args.lm_type == 'bbu':
-            dataset["class_names"] = [x.lower() for x in dataset["class_names"]]
+            dataset["class_names"] = [[x.lower() for x in lst] for lst in dataset["class_names"]]
 
         data = dataset["cleaned_text"]
         if args.lm_type == 'bbu':
@@ -238,7 +238,7 @@ if __name__ == '__main__':
     parser.add_argument("--dataset_name", type=str, required=True)
     parser.add_argument("--random_state", type=int, default=42)
     parser.add_argument("--lm_type", type=str, default='bbu')
-    parser.add_argument("--vocab_min_occurrence", type=int, default=5)
+    parser.add_argument("--vocab_min_occurrence", type=int, default=2)
     parser.add_argument("--do_sent", type=str, default="no")
     # last layer of BERT
     parser.add_argument("--layer", type=int, default=12)

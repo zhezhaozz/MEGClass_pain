@@ -11,10 +11,10 @@ def main(args):
     # initialize representations before iterative process: 
 
     print("Starting to compute static representations...")
-    #static_representations.main(args)
+    static_representations.main(args)
 
     print("Starting to compute class-oriented document representations...")
-    #class_oriented_sent_representations.main(args)
+    class_oriented_sent_representations.main(args)
 
     start = time.time()
     megclass.main(args)
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     parser.add_argument("--random_state", type=int, default=42)
     parser.add_argument("--lm_type", type=str, default='bbu')
     parser.add_argument("--emb", type=str, default='plm')
-    parser.add_argument("--vocab_min_occurrence", type=int, default=5)
+    parser.add_argument("--vocab_min_occurrence", type=int, default=2)
     parser.add_argument("--layer", type=int, default=12)
     parser.add_argument("--soft", action="store_true", help="Whether to run use soft pseudo-labels for final fine-tuning.")
 

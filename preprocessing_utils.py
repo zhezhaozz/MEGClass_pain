@@ -42,8 +42,7 @@ def clean_email(string: str):
 def clean_str(string):
     string = clean_html(string)
     string = clean_email(string)
-    string = re.sub(r'http\S+', '', string)
-    string = re.sub(r"[^A-Za-z0-9(),.!?\_\-\"\']", " ", string)
+    string = re.sub(r"[^A-Za-z0-9(),.!?\"\']", " ", string)
     string = re.sub(r"\s{2,}", " ", string)
     return string.strip()
 
@@ -77,8 +76,11 @@ def load_probs(data_dir):
     return probs
 
 def load_classnames(data_dir):
+    class_names = []
     with open(os.path.join(data_dir, 'classes.txt'), mode='r', encoding='utf-8') as classnames_file:
-        class_names = "".join(classnames_file.readlines()).strip().split("\n")
+        for line in classnames_file:
+            names = line.strip().split(',')
+            class_names.append(names)
     return class_names
 
 

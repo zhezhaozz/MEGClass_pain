@@ -49,7 +49,11 @@ def docToClass(doc_repr, class_repr):
     doc_to_class = np.argmax(doccos, axis=1) # N x 1
     return doc_to_class
 
-def evaluate_predictions(true_class, predicted_class, output_to_console=True, return_tuple=False, return_confusion=False):
+def evaluate_predictions(true_class, predicted_class, test_index=None, output_to_console=True, return_tuple=False, return_confusion=False):
+    if test_index is not None:
+        with open(os.path.join(DATA_FOLDER_PATH, "Pain-study", f"{test_index}.txt"), mode='r', encoding='utf-8') as index_file:
+            index = list(map(lambda x: int(x.strip()), index_file.readlines()))
+        predicted_class = predicted_class[index]
     confusion = confusion_matrix(true_class, predicted_class)
     if return_confusion and output_to_console:
         print("-" * 80 + "Evaluating" + "-" * 80)
@@ -91,7 +95,7 @@ def getDSMapAndGold(args, sent_dict):
         sent_ids = []
         for sent in doc:
             sent_ids.append(sent_id)
-            gold_sent_labels.append(gold_labels[doc_id])
+            #gold_sent_labels.append(gold_labels[doc_id])
             sent_id += 1
         doc_to_sent.append(sent_ids)
             
@@ -223,9 +227,9 @@ def generateDataset(documents_to_class, ranks, class_dist, num_classes, cleaned_
     classes = [documents_to_class[i] for i in selected]
     probs = [class_dist[i] for i in selected]
     ###
-    gold_classes = [gold_labels[i] for i in selected]
-    print(f"Threshold {thresh*100}% Evaluation: ")
-    evaluate_predictions(gold_classes, classes,return_confusion=True)
+    #gold_classes = [gold_labels[i] for i in selected]
+    #print(f"Threshold {thresh*100}% Evaluation: ")
+    #evaluate_predictions(gold_classes, classes,return_confusion=True)
     ###
     if write:
         write_to_dir(text, classes, probs, data_path, new_data_path)

@@ -136,7 +136,7 @@ def main(args):
     padded_sent_repr, doc_lengths, sentence_mask = bertSentenceEmb(args, doc_to_sent, sent_repr)
     init_class_weights, init_sent_weights = getTargetClassSet(padded_sent_repr, doc_lengths, class_set, alpha=None, set_weights=None)
     print("Initial Target Class Distribution Evaluation:")
-    evaluate_predictions(gold_labels, np.argmax(init_class_weights, axis=1), return_confusion=True)
+    evaluate_predictions(gold_labels, np.argmax(init_class_weights, axis=1), test_index="test_index", return_confusion=True)
 
     # learn contextualized reprs + update class set for each iteration
     curr_class_weights = init_class_weights
@@ -146,7 +146,7 @@ def main(args):
         doc_to_class, final_doc_emb, updated_sent_repr, updated_sent_weights = contextEmb(args, padded_sent_repr, sentence_mask, class_repr, curr_class_weights, doc_lengths, new_data_path, device)
         doc_pred = np.rint(doc_to_class)
         print(f"Iteration {i} Training Evaluation: ")
-        evaluate_predictions(gold_labels, doc_pred, return_confusion=True)
+        evaluate_predictions(gold_labels, doc_pred, test_index="test_index", return_confusion=True)
 
         # pca transform on contextualized reprs
         _pca = PCA(n_components=args.pca, random_state=args.random_state)
@@ -154,7 +154,7 @@ def main(args):
         pca_class_repr = [_pca.transform(init_class_set[i]) for i in np.arange(len(init_class_set))]
         doc_class_assignment, doc_class_cos = docToClassSet(pca_doc_repr, pca_class_repr, None)
         print(f"Iteration {i} PCA Evaluation: ")
-        evaluate_predictions(gold_labels, doc_class_assignment, return_confusion=True)
+        evaluate_predictions(gold_labels, doc_class_assignment, test_index="test_index", return_confusion=True)
 
         # soft pseudo-labels in case of soft classifier
         reg_temp = 0.2
@@ -166,18 +166,22 @@ def main(args):
             thresh = args.doc_thresh
             finalconf = generateDataset(doc_class_assignment, doc_rank, doc_class_dist, num_classes, cleaned_text, 
                                         gold_labels, data_path, new_data_path, thresh, write=True)
+            updateClassSet(finalconf, final_doc_emb, class_set)
+
+            # recompute target class distribution based on updated contextualized sent repr, sentence weights, and class set
+            curr_class_weights = getTargetClassSet(updated_sent_repr, doc_lengths, class_set, alpha=updated_sent_weights, set_weights=None)
+            print(f"Iter {i} Target Class Distribution Evaluation:")
+            evaluate_predictions(gold_labels, np.argmax(curr_class_weights, axis=1), test_index="test_index", return_confusion=True)
         else:
             thresh = args.k
             finalconf = generateDataset(doc_class_assignment, doc_rank, doc_class_dist, num_classes, cleaned_text, 
                                         gold_labels, data_path, new_data_path, thresh, write=False)
-            print(class_set[-1])
             updateClassSet(finalconf, final_doc_emb, class_set)
-            print(class_set[-1])
 
             # recompute target class distribution based on updated contextualized sent repr, sentence weights, and class set
             curr_class_weights = getTargetClassSet(updated_sent_repr, doc_lengths, class_set, alpha=updated_sent_weights, set_weights=None)
-            print(f"Iter {i+1} Target Class Distribution Evaluation:")
-            evaluate_predictions(gold_labels, np.argmax(curr_class_weights, axis=1), return_confusion=True)
+            print(f"Iter {i} Target Class Distribution Evaluation:")
+            evaluate_predictions(gold_labels, np.argmax(curr_class_weights, axis=1), test_index="test_index", return_confusion=True)
     
 
 

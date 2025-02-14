@@ -2,12 +2,19 @@ import subprocess
 import os
 import pickle as pk
 import argparse
+import random
+import torch
 import time
 import numpy as np
 import megclass, train_text_classifier, train_soft_classifier, class_oriented_sent_representations, static_representations
 from utils import (DATA_FOLDER_PATH, INTERMEDIATE_DATA_FOLDER_PATH)
 
 def main(args):
+    random.seed(args.random_state)
+    np.random.seed(args.random_state)
+    torch.manual_seed(args.random_state)
+    torch.cuda.manual_seed_all(args.random_state)
+
     # initialize representations before iterative process: 
 
     print("Starting to compute static representations...")
@@ -19,12 +26,12 @@ def main(args):
     start = time.time()
     megclass.main(args)
     
-    #if args.soft:
-    #    print("Training classifier with soft labels!")
-    #    train_soft_classifier.main(args)
-    #else:
-    #    print("Training classifier with hard labels!")
-    #    train_text_classifier.main(args)
+    if args.soft:
+        print("Training classifier with soft labels!")
+        train_soft_classifier.main(args)
+    else:
+        print("Training classifier with hard labels!")
+        train_text_classifier.main(args)
 
     print(f"Total Time: {(time.time()-start)/60} minutes")
 
@@ -40,8 +47,8 @@ if __name__ == '__main__':
     parser.add_argument("--max_sent", type=int, default=150, help="For padding, the max number of sentences within a document.")
     parser.add_argument("--temp", type=float, default=0.1, help="temperature scaling factor; regularization")
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for training contextualized embeddings.")
-    parser.add_argument("--iters", type=int, default=4, help="number of iters for re-training embeddings.")
-    parser.add_argument("--k", type=float, default=0.075, help="Top k percent docs added to class set.")
+    parser.add_argument("--iters", type=int, default=1, help="number of iters for re-training embeddings.")
+    parser.add_argument("--k", type=float, default=0.05, help="Top k percent docs added to class set.")
     parser.add_argument(
             "--train_data_dir",
             default=INTERMEDIATE_DATA_FOLDER_PATH,

@@ -184,9 +184,8 @@ def main(args):
                 temp_repr.append(static_word_representations[word_to_index[w]])
             else:
                 w_temp_repr=np.array([static_word_representations[word_to_index[wi]] for wi in w.split("_")])
-                temp_repr.append([np.mean(w_temp_repr, axis=0)])
-        class_words_representations.append([np.mean(np.stack(temp_repr), axis=0)])  
-
+                temp_repr.append(np.mean(w_temp_repr, axis=0))
+        class_words_representations.append([np.mean(np.stack(temp_repr), axis=0)]) 
     #class_words_representations = [[static_word_representations[word_to_index[class_names[cls]]]] for cls in range(len(class_names))]
 
     # Use X-Class keyword expansion for retrieving seedwords (give priority even if seeds.txt is specified)

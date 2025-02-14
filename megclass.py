@@ -116,7 +116,7 @@ def main(args):
         dataset = pk.load(f)
         sent_dict = dataset["sent_data"]
         cleaned_text = dataset["cleaned_text"]
-        #class_names = np.array(dataset["class_names"])
+        class_names = dataset["class_names"]
 
     with open(os.path.join(INTERMEDIATE_DATA_FOLDER_PATH, args.dataset_name, "document_repr_lm-bbu-12-mixture-plm.pk"), "rb") as f:
         reprpickle = pk.load(f)
@@ -169,6 +169,10 @@ def main(args):
             updateClassSet(finalconf, final_doc_emb, class_set)
 
             # recompute target class distribution based on updated contextualized sent repr, sentence weights, and class set
+            thresh = args.k
+            finalconf = generateDataset(doc_class_assignment, doc_rank, doc_class_dist, num_classes, cleaned_text, 
+                                        gold_labels, data_path, new_data_path, thresh, write=False)
+            updateClassSet(finalconf, final_doc_emb, class_set)
             curr_class_weights = getTargetClassSet(updated_sent_repr, doc_lengths, class_set, alpha=updated_sent_weights, set_weights=None)
             print(f"Iter {i} Target Class Distribution Evaluation:")
             evaluate_predictions(gold_labels, np.argmax(curr_class_weights, axis=1), test_index="test_index", return_confusion=True)
